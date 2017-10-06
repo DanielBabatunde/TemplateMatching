@@ -1,178 +1,195 @@
+#include "opencv2/video/tracking.hpp"
+#include "opencv2/imgproc.hpp"
+#include "opencv2/videoio.hpp"
+#include "opencv2/highgui.hpp"
+
 #include <iostream>
-#include "opencv2/opencv.hpp"
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/objdetect/objdetect.hpp>
-#include <opencv2/tracking.hpp>
-
-#include <sstream>
-
+#include <ctype.h>
 
 using namespace cv;
 using namespace std;
 
-Point point1, point2; /* vertical points of the bounding box */
-int drag = 0;
-Rect rect; /* bounding box */
-Mat img, roiImg; /* roiImg - the part of the image in the bounding box */
-int select_flag = 0;
-bool go_fast = false;
 
-Mat mytemplate;
+bool pointTrackingFlag = false;
+Point2f currentPoint;
+vector<Point2i>TrackedPoints;
 
 
-///------- template matching -----------------------------------------------------------------------------------------------
-
-Mat TplMatch( Mat &img, Mat &mytemplate )
+static void onMouse( int event, int x, int y, int, void* )
 {
-  Mat result;
 
-  // compares the template against overlapped mage regions
-  matchTemplate( img, mytemplate, result, CV_TM_SQDIFF_NORMED );
-  // Normalizes the results using NORM_MINMAX
-  normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
+    //Detect Mouse button event
+    if( event == EVENT_LBUTTONDOWN )
+    {
+        //Assign current (x,y) position to currentPoint
+        currentPoint = Point2f((float)x, (float)y);
 
-  return result;
+        // set Tracking flag
+        pointTrackingFlag = true;
+    }
 }
 
-
-///------- Localizing the best match with minMaxLoc ------------------------------------------------------------------------
-
-Point minmax( Mat &result )
+int main( int argc, char** argv)
 {
-  double minVal, maxVal;
-  Point  minLoc, maxLoc, matchLoc;
-
-  minMaxLoc( result, &minVal, &maxVal, &minLoc, &maxLoc, Mat() );
-  matchLoc = minLoc;
-
-  return matchLoc;
-}
-
-
-///------- tracking --------------------------------------------------------------------------------------------------------
-
-void track()
-{
-    if (select_flag)
-    {
-        //roiImg.copyTo(mytemplate);
-//         select_flag = false;
-        go_fast = true;
-    }
-
-//     imshow( "mytemplate", mytemplate ); waitKey(0);
-
-    Mat result  =  TplMatch( img, mytemplate );
-    Point match =  minmax( result );
-
-    rectangle( img, match, Point( match.x + mytemplate.cols , match.y + mytemplate.rows ), CV_RGB(255, 255, 255), 0.5 );
-
-    std::cout << "match: " << match << endl;
-
-    /// latest match is the new template
-    Rect ROI = cv::Rect( match.x, match.y, mytemplate.cols, mytemplate.rows );
-    roiImg = img( ROI );
-    roiImg.copyTo(mytemplate);
-    imshow( "roiImg", roiImg ); //waitKey(0);
-}
-
-
-///------- MouseCallback function ------------------------------------------------------------------------------------------
-
-void mouseHandler(int event, int x, int y, int flags, void *param)
-{
-    if (event == CV_EVENT_LBUTTONDOWN && !drag)
-    {
-        /// left button clicked. ROI selection begins
-        point1 = Point(x, y);
-        drag = 1;
-    }
-
-    if (event == CV_EVENT_MOUSEMOVE && drag)
-    {
-        /// mouse dragged. ROI being selected
-        Mat img1 = img.clone();
-        point2 = Point(x, y);
-        rectangle(img1, point1, point2, CV_RGB(255, 0, 0), 3, 8, 0);
-        imshow("image", img1);
-    }
-
-    if (event == CV_EVENT_LBUTTONUP && drag)
-    {
-        point2 = Point(x, y);
-        rect = Rect(point1.x, point1.y, x - point1.x, y - point1.y);
-        drag = 0;
-        roiImg = img(rect);
-        roiImg.copyTo(mytemplate);
-//  imshow("MOUSE roiImg", roiImg); waitKey(0);
-    }
-
-    if (event == CV_EVENT_LBUTTONUP)
-    {
-        /// ROI selected
-        select_flag = 1;
-        drag = 0;
-    }
-
-}
-
-///------- Main() ----------------------------------------------------------------------------------------------------------
-
-int main()
-{
-    int k;
-    Rect2d Rect;
-
-    ///open video file
     VideoCapture cap;
-    cap.open("C:/Users/Jsquadron/Downloads/sample.mp4" );
-    if ( !cap.isOpened() )
-    {   cout << "Unable to open video file" << endl;    return -1;    }
-/*
-    /// Set video to 320x240
-     cap.set(CV_CAP_PROP_FRAME_WIDTH, 320);
-     cap.set(CV_CAP_PROP_FRAME_HEIGHT, 240);*/
+    Mat frame;
+    Mat image;
+    Mat prevGrayImage;
+    Mat curGrayImage;
+    //float scalingFactor = 0.5;
+    vector <Point2f> trackingPoints[2];
+    Size winSize(31,31);
+    bool playVideo = false;
+    double distance;
+    double velocity;
 
-    cap >> img;
-    GaussianBlur( img, img, Size(7,7), 3.0 );
-    imshow( "image", img );
 
-    while (1)
+
+    namedWindow( "Demo", 1 );
+
+    setMouseCallback("Demo", onMouse, 0);
+
+     cap.open("C:/Users/Jsquadron/Downloads/sample.mp4" );
+
+     double fps = cap.get(CV_CAP_PROP_FPS);
+     double height = cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+     double width = cap.get(CV_CAP_PROP_FRAME_WIDTH);
+
+
+    if(!cap.isOpened())
     {
-        cap >> img;
-        if ( img.empty() )
-            break;
-
-    // Flip the frame horizontally and add blur
-    cv::flip( img, img, 1 );
-    GaussianBlur( img, img, Size(7,7), 3.0 );
-
-       if ( Rect.width == 0 && Rect.height == 0 )
-       {
-       // cvSetMouseCallback( "image", mouseHandler, NULL );
-
-
-             Rect = selectROI("image", img, false, false);
-             roiImg = img(Rect);
-             roiImg.copyTo(mytemplate);
-        }
-        else
-            track();
-
-        imshow("image", img);
-        if(waitKey(1)==27)
-        {
-            break;
-        }
+        cerr << "Unable to open video" << endl;
+        return -1;
     }
 
+    // Termination criteria for tracking the points in the video
+   TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
+     cap >> frame;
+
+    while (true)
+    {
+       if(playVideo)
+        cap >> frame;
+
+        if(frame.empty())
+            break;
+
+        // Resize frame
+        //resize(frame, frame, Size(), scalingFactor, scalingFactor, INTER_AREA)
+
+        //Copy input frame
+        frame.copyTo(image);
+
+        // Convert image to grayScale
+        cvtColor(image, curGrayImage, COLOR_BGR2GRAY);
+
+        // Check if there are points to track.
+        if(!trackingPoints[0].empty())
+        {
+            //Status vector to check if
+            //flow of corresponding features have been found
+            vector<uchar> statusVector;
+
+            //Error Vector to indicate error for corresponing features
+            vector<float> errorVector;
+
+            //is previous image empty?
+            if(prevGrayImage.empty())
+            {
+                //Copy current gray image to previous gray image
+                curGrayImage.copyTo(prevGrayImage);
+            }
+
+            //Calculate Optical Flow using LK Algorithm
+            calcOpticalFlowPyrLK(prevGrayImage, curGrayImage, trackingPoints[0], trackingPoints[1],
+                                  statusVector, errorVector, winSize,3, termcrit, 0, 0.001);
+
+            int count = 0;
+
+            //Minumum distance between any tracking points
+            int minDist =3;
+
+            for(int i = 0; i < trackingPoints[1].size(); i++)
+            {
+                // if new point is within minimum distance from
+                //an existing point, it won't be tracked
+                if(norm(currentPoint - trackingPoints[1][i]) <= minDist)
+                {
+                    pointTrackingFlag = false;
+                    continue;
+                }
+
+                // Check status vector
+                if(!statusVector[i])
+                {
+                    continue;
+                }
+
+                trackingPoints[1][count++] = trackingPoints[1][i];
+                TrackedPoints.push_back(trackingPoints[1][i]);
+
+                for(int i = 0; i<TrackedPoints.size(); i++)
+                {
+                     distance = norm(TrackedPoints[i+1]-TrackedPoints[i]);
+                    circle(image,Point(TrackedPoints[i].x, TrackedPoints[i].y), 4, Scalar(0,0,255), 8, 4, 0);
+                    velocity = distance/fps;
+
+                    //cout << "Distance = " << distance << endl;
+                    cout << "Velocity =" << velocity << "pixels per second" << endl;
+                }
+
+                //Draw a circle for each tracked point
+                //circle(image, trackingPoints[1][i], 8, Scalar(255,0,0), 2, 8);
+
+            }
+
+            trackingPoints[1].resize(count);
+
+
+        }
+
+        int maxPoints = 500;
+
+        //Refine Location for tracking points
+        if(pointTrackingFlag && trackingPoints[1].size() < maxPoints)
+        {
+            vector<Point2f> tempPoints;
+            // Add current mouse point to tracking point vector
+            tempPoints.push_back(currentPoint);
+
+            //Refine location of pixels to subpixel accuracy
+            // Pixel = image patch of Window Size not image pixel
+            cornerSubPix(curGrayImage, tempPoints, winSize, cvSize(-1, -1), termcrit);
+
+            // Add first element of vector to current tracking points
+            trackingPoints[1].push_back(tempPoints[0]);
+            pointTrackingFlag = false;
+
+        }
+
+        // Display image with tracking points
+
+        imshow("Demo", image);
+
+        // Is Esc key pressed?  // change this to a string
+        char c = (char)waitKey(10);
+              if( c == 27 )
+                  break;
+
+          switch (c)
+          {
+            case 'p':
+             playVideo = !playVideo;
+
+          }
+
+         //Swap "points vector to update previous point to current
+         std::swap(trackingPoints[1], trackingPoints[0]);
+
+         //Swap images to update previous point to current
+         cv::swap(prevGrayImage, curGrayImage);
+
+
+    }
     return 0;
 }
-
-
-
-
-
-
-
