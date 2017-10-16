@@ -13,11 +13,54 @@ using namespace std;
 bool pointTrackingFlag = false;
 Point2f currentPoint;
 vector<Point2i>TrackedPoints;
+Point P1(0,0);
+Point P2(0,0);
+Point End(0, 0);
+bool clicked = false;
+bool calibrate = true;
+bool tracking = false;
 
 
-static void onMouse( int event, int x, int y, int, void* )
+
+
+// Function to draw a line.
+static void LineMouseCallback( int event, int x, int y, int, void* )
 {
 
+    switch (event)
+    {
+
+     case EVENT_LBUTTONDOWN:
+        clicked = true;
+        P1.x = x;
+        P1.y = y;
+        cout << "Start Point (" << x << ", " << y << ")" << endl;
+        break;
+
+      case EVENT_LBUTTONUP:
+        End.x = x;
+         End.y = y;
+         clicked = false;
+         cout << "End Point (" << x << ", " << y << ")" << endl;
+        break;
+
+      case EVENT_MOUSEMOVE:
+          if(clicked)
+          {
+              P2.x = x;
+              P2.y = y;
+
+          }
+        break;
+      default    : break;
+      }
+ }
+
+//// Function to choose a point
+static void onMouse( int event, int x, int y, int, void* )
+{
+   if(tracking)
+   {
     //Detect Mouse button event
     if( event == EVENT_LBUTTONDOWN )
     {
@@ -27,7 +70,20 @@ static void onMouse( int event, int x, int y, int, void* )
         // set Tracking flag
         pointTrackingFlag = true;
     }
+   }
+
+   if (calibrate)
+    {
+
+        cout << "in this window"<< endl;
+        namedWindow("Demo", 1 );
+
+       setMouseCallback("Demo", LineMouseCallback, 0);
+        calibrate = false;
+
+    }
 }
+
 
 int main( int argc, char** argv)
 {
@@ -45,7 +101,7 @@ int main( int argc, char** argv)
 
 
 
-    namedWindow( "Demo", 1 );
+    namedWindow("Demo", 1 );
 
     setMouseCallback("Demo", onMouse, 0);
 
@@ -54,6 +110,9 @@ int main( int argc, char** argv)
      double fps = cap.get(CV_CAP_PROP_FPS);
      double height = cap.get(CV_CAP_PROP_FRAME_HEIGHT);
      double width = cap.get(CV_CAP_PROP_FRAME_WIDTH);
+
+     //VideoWriter video("output.mkv", cap.get(CV_CAP_PROP_FOURCC), fps, Size(width, height));
+      VideoWriter video("output.avi", CV_FOURCC('X','2','6','4'), fps, Size(width, height));
 
 
     if(!cap.isOpened())
@@ -66,10 +125,27 @@ int main( int argc, char** argv)
    TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
      cap >> frame;
 
+
+
     while (true)
     {
+         tracking = true;
+        double distance = norm(End- P1);
+        double diameter = 0.45;
+
+        double unit_Euclidean = diameter/distance;
+
+       // cout << " Euclidean distance : " << distance << endl;
+       // cout << "1 unit Euclidean = " << unit_Euclidean << " m" << endl;
+
        if(playVideo)
         cap >> frame;
+       // draw line
+       if (P1.x && P2.x & End.x != 0)
+       {
+         line(image, P1, End, Scalar (255,0, 0), 1, CV_AA, 0 );
+       }
+
 
         if(frame.empty())
             break;
@@ -135,7 +211,7 @@ int main( int argc, char** argv)
                     velocity = distance/fps;
 
                     //cout << "Distance = " << distance << endl;
-                    cout << "Velocity =" << velocity << "pixels per second" << endl;
+                   // cout << "Velocity =" << velocity << "pixels per second" << endl;
                 }
 
                 //Draw a circle for each tracked point
@@ -168,6 +244,8 @@ int main( int argc, char** argv)
         }
 
         // Display image with tracking points
+
+        video.write(image);
 
         imshow("Demo", image);
 
