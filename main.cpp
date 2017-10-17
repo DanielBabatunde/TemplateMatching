@@ -21,6 +21,9 @@ bool calibrate = true;
 bool tracking = false;
 
 
+void onMouse(int event, int x, int y);
+
+
 
 
 // Function to draw a line.
@@ -56,33 +59,65 @@ static void LineMouseCallback( int event, int x, int y, int, void* )
       }
  }
 
-//// Function to choose a point
-static void onMouse( int event, int x, int y, int, void* )
+static void LineMouseCallback2( int event, int x, int y )
 {
-   if(tracking)
-   {
-    //Detect Mouse button event
-    if( event == EVENT_LBUTTONDOWN )
+
+    switch (event)
     {
+
+     case EVENT_LBUTTONDOWN:
+        clicked = true;
+        P1.x = x;
+        P1.y = y;
+        cout << "Start Point (" << x << ", " << y << ")" << endl;
+        break;
+
+      case EVENT_LBUTTONUP:
+        End.x = x;
+         End.y = y;
+         clicked = false;
+         cout << "End Point (" << x << ", " << y << ")" << endl;
+          // set tracking to true here.
+         tracking = true;
+        break;
+
+      case EVENT_MOUSEMOVE:
+          if(clicked)
+          {
+              P2.x = x;
+              P2.y = y;
+
+
+
+          }
+        break;
+      default    : break;
+      }
+ }
+//// Function to choose a point
+static void onMouse( int event, int x, int y, int, void* userdata)
+{
+     if(tracking)
+     {
+       if( event == EVENT_LBUTTONDOWN )
+      {
         //Assign current (x,y) position to currentPoint
         currentPoint = Point2f((float)x, (float)y);
 
         // set Tracking flag
         pointTrackingFlag = true;
-    }
-   }
 
-   if (calibrate)
+       }
+     }
+    else
     {
-
-        cout << "in this window"<< endl;
-        namedWindow("Demo", 1 );
-
-       setMouseCallback("Demo", LineMouseCallback, 0);
-        calibrate = false;
+        LineMouseCallback2(event, x, y);
 
     }
+
 }
+
+
 
 
 int main( int argc, char** argv)
@@ -92,12 +127,12 @@ int main( int argc, char** argv)
     Mat image;
     Mat prevGrayImage;
     Mat curGrayImage;
-    //float scalingFactor = 0.5;
     vector <Point2f> trackingPoints[2];
     Size winSize(31,31);
     bool playVideo = false;
     double distance;
     double velocity;
+    tracking = false;
 
 
 
@@ -105,7 +140,7 @@ int main( int argc, char** argv)
 
     setMouseCallback("Demo", onMouse, 0);
 
-     cap.open("C:/Users/Jsquadron/Downloads/sample.mp4" );
+     //cap.open("sample.mp4" );
 
      double fps = cap.get(CV_CAP_PROP_FPS);
      double height = cap.get(CV_CAP_PROP_FRAME_HEIGHT);
@@ -126,25 +161,29 @@ int main( int argc, char** argv)
      cap >> frame;
 
 
+     double unit_Euclidean = diameter/distance;
+
+
 
     while (true)
     {
-         tracking = true;
+        if (P1.x && P2.x && End.x != 0)
+        {
+          line(frame, P1, End, Scalar (255,0, 0), 1, CV_AA, 0 );
+        }
+
+
         double distance = norm(End- P1);
         double diameter = 0.45;
 
-        double unit_Euclidean = diameter/distance;
 
-       // cout << " Euclidean distance : " << distance << endl;
-       // cout << "1 unit Euclidean = " << unit_Euclidean << " m" << endl;
+        cout << " Euclidean distance : " << distance << endl;
+       cout << "1 unit Euclidean = " << unit_Euclidean << " m" << endl;
 
        if(playVideo)
         cap >> frame;
        // draw line
-       if (P1.x && P2.x & End.x != 0)
-       {
-         line(image, P1, End, Scalar (255,0, 0), 1, CV_AA, 0 );
-       }
+
 
 
         if(frame.empty())
@@ -208,10 +247,10 @@ int main( int argc, char** argv)
                 {
                      distance = norm(TrackedPoints[i+1]-TrackedPoints[i]);
                     circle(image,Point(TrackedPoints[i].x, TrackedPoints[i].y), 4, Scalar(0,0,255), 8, 4, 0);
-                    velocity = distance/fps;
-
+                    //velocity = (distance/fps) * unit_Euclidean;
+                    velocity = distance* unit_Euclidean;
                     //cout << "Distance = " << distance << endl;
-                   // cout << "Velocity =" << velocity << "pixels per second" << endl;
+                    cout << "Velocity =" << velocity << "metres per second" << endl;
                 }
 
                 //Draw a circle for each tracked point
